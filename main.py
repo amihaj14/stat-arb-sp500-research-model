@@ -8,23 +8,26 @@ import Strategy
 import pandas as pd
 
 # Keep the full S&P 500 universe, but avoid expensive plotting during the scan.
-beta_lookup = {(row.Stock1, row.Stock2): row.BetaValue for row in DataLoader.stockCombi_df.itertuples(index=False)}
-
 pairs = list(DataLoader.stockCombi_df.itertuples(index=False))
 print(f"Running backtest on {len(pairs)} candidate pairs using up to {min(8, os.cpu_count() or 1)} threads...")
 
 
 def evaluate_pair(row):
     s1, s2 = row.Stock1, row.Stock2
-    beta = row.BetaValue
+
+    training_pair = DataLoader.trainPrices[[s1, s2]].dropna()
+    if training_pair.shape[0] < 100:
+        return None
+
+    alpha, beta, _ = Strategy.lin_reg(training_pair[s1], training_pair[s2])
 
     test_pair = DataLoader.testPrices[[s1, s2]].dropna()
     if test_pair.shape[0] < 100:
         return None
 
-    _, _, residuals = Strategy.lin_reg(test_pair[s1], test_pair[s2])
+    residuals = test_pair[s2] - (alpha + beta * test_pair[s1])
     zscore = Strategy.z_score(residuals, 60)
-    signals = Strategy.generate_signals(zscore)
+    signals = Strategy.generate_signals(zscore, entry_threshold=2.5, exit_threshold=0.5)
 
     _, _, metrics = Backtest.backtest(test_pair, signals, beta, residuals, show_plots=False)
     metrics["Pair"] = f"{s1}-{s2}"
@@ -60,31 +63,29 @@ def plot_summary(results_df):
 
 
 def plot_top_pairs(best_pairs):
-    fig, axes = plt.subplots(len(best_pairs), 3, figsize=(18, 5 * len(best_pairs)))
-    if len(best_pairs) == 1:
-        axes = [axes]
-
-    for row_index, row in enumerate(best_pairs.itertuples(index=False)):
+    # Plot each pair on its own figure (3 panels: cumulative, drawdown, residuals+markers)
+    for row in best_pairs.itertuples(index=False):
         pair = row.Pair
         s1, s2 = pair.split("-")
         pair_test = DataLoader.testPrices[[s1, s2]].dropna()
 
+        training_pair = DataLoader.trainPrices[[s1, s2]].dropna()
+        alpha, beta, _ = Strategy.lin_reg(training_pair[s1], training_pair[s2])
+        residuals = pair_test[s2] - (alpha + beta * pair_test[s1])
+        zscore = Strategy.z_score(residuals, window=60)
+        signals = Strategy.generate_signals(zscore, entry_threshold=2.5, exit_threshold=0.5)
         _, cumulative, _ = Backtest.backtest(
             pair_test,
-            Strategy.generate_signals(Strategy.z_score(Strategy.lin_reg(pair_test[s1], pair_test[s2])[2], window=60)),
-            beta_lookup[(s1, s2)],
-            Strategy.lin_reg(pair_test[s1], pair_test[s2])[2],
+            signals,
+            beta,
+            residuals,
             show_plots=False,
         )
-        residuals = Strategy.lin_reg(pair_test[s1], pair_test[s2])[2]
-        zscore = Strategy.z_score(residuals, window=60)
-        signals = Strategy.generate_signals(zscore)
 
         drawdown = cumulative / cumulative.cummax() - 1
 
-        ax_cum = axes[row_index][0] if len(best_pairs) > 1 else axes[0]
-        ax_dd = axes[row_index][1] if len(best_pairs) > 1 else axes[1]
-        ax_spread = axes[row_index][2] if len(best_pairs) > 1 else axes[2]
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        ax_cum, ax_dd, ax_spread = axes[0], axes[1], axes[2]
 
         ax_cum.plot(cumulative, color="tab:blue")
         ax_cum.set_title(f"{pair} Cumulative Return")
@@ -94,11 +95,13 @@ def plot_top_pairs(best_pairs):
         ax_dd.set_title(f"{pair} Drawdown")
         ax_dd.set_ylabel("Drawdown")
 
+        # Plot residuals and mark trade entries/exits
         ax_spread.plot(residuals, label="Residuals", color="tab:purple")
-        ax_spread.plot(residuals[signals == 1], "rv", label="Short", markersize=6)
-        ax_spread.plot(residuals[signals == -1], "g^", label="Long", markersize=6)
+        Backtest.plot_trade_markers(residuals, signals, ax=ax_spread)
         ax_spread.set_title(f"{pair} Residuals + Signals")
-        ax_spread.legend(loc="upper left")
+
+        plt.tight_layout()
+        plt.show()
 
     plt.tight_layout()
     plt.show()

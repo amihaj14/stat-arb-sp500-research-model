@@ -25,9 +25,24 @@ def z_score(residuals, window=None):
     return zscore 
     
 """Calculates short and long signals using z-score"""
-def generate_signals(zscore):
+def generate_signals(zscore, entry_threshold=2.5, exit_threshold=0.5):
+    if exit_threshold >= entry_threshold:
+        raise ValueError("exit_threshold must be smaller than entry_threshold")
+
+    position = 0
     signals = pd.Series(index=zscore.index, dtype='int')
-    signals[zscore > 0.5] = 1   #Short A, Long B
-    signals[zscore < -0.5] = -1 #Short B, Long A
-    signals[(zscore >= -0.5) & (zscore <= 0.5)] = 0   #Neutral, close the position
-    return signals    
+
+    for date, value in zscore.items():
+        if position == 0:
+            if value > entry_threshold:
+                position = -1
+            elif value < -entry_threshold:
+                position = 1
+        elif position == 1 and value >= -exit_threshold:
+            position = 0
+        elif position == -1 and value <= exit_threshold:
+            position = 0
+
+        signals.at[date] = position
+
+    return signals
