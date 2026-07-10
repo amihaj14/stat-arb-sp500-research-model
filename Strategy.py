@@ -1,15 +1,17 @@
-import statsmodels.api as sm
+import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import coint
-#import DataLoader
 
-"""Uses linear regression to obtain residuals, alpha, and beta values"""
+"""Uses linear regression to obtain residuals, alpha, and beta values."""
 def lin_reg(Y, X):
-        X_const = sm.add_constant(X)
-        model = sm.OLS(Y, X_const).fit()
-        alpha, beta = model.params
-        residuals = Y - (alpha + beta * X)
-        return alpha, beta, residuals
+    X_array = np.asarray(X, dtype=float)
+    Y_array = np.asarray(Y, dtype=float)
+    X_const = np.column_stack((np.ones(len(X_array)), X_array))
+    coeffs, _, _, _ = np.linalg.lstsq(X_const, Y_array, rcond=None)
+    alpha, beta = coeffs
+    residuals = Y_array - (alpha + beta * X_array)
+    if hasattr(Y, "index"):
+        return alpha, beta, pd.Series(residuals, index=Y.index)
+    return alpha, beta, residuals
 
 """Uses spread residuals found from linear regression to compute z-score"""
 def z_score(residuals, window=None):
