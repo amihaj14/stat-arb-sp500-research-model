@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-"""Uses linear regression to obtain residuals, alpha, and beta values."""
 def lin_reg(Y, X):
     X_array = np.asarray(X, dtype=float)
     Y_array = np.asarray(Y, dtype=float)
@@ -13,7 +12,6 @@ def lin_reg(Y, X):
         return alpha, beta, pd.Series(residuals, index=Y.index)
     return alpha, beta, residuals
 
-"""Uses spread residuals found from linear regression to compute z-score"""
 def z_score(residuals, window=None):
     if window:
         mean = residuals.rolling(window=window).mean()
@@ -24,7 +22,6 @@ def z_score(residuals, window=None):
     zscore = (residuals - mean)/std
     return zscore 
     
-"""Calculates short and long signals using z-score"""
 def generate_signals(zscore, entry_threshold=2.5, exit_threshold=0.5):
     if exit_threshold >= entry_threshold:
         raise ValueError("exit_threshold must be smaller than entry_threshold")
