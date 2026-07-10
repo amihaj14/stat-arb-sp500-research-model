@@ -54,7 +54,6 @@ def backtest(prices, signals, beta, residuals, show_plots=False):
         tree.pack(expand=True, fill="both")
         root.mainloop()
 
-    # always return metrics
     results = {
         "Total Return": totReturn,
         "CAGR": cagr,
