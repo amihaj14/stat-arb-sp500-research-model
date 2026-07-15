@@ -17,6 +17,15 @@ live/state/
 daily_pnl.csv
 positions.csv
 trades.csv
+scheduler_output.log
+
+# Scheduler batch wrapper (contains local absolute paths, personal info)
+run_trader.bat
+*.bat
+!run_trader.bat.example
+
+# ntfy topic name (private notification channel, treat as a secret)
+live/engine/notify.py
 
 # ============================
 # Python

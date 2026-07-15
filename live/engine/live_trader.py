@@ -10,6 +10,7 @@ from live.engine.live_data import get_latest_quotes, get_history
 from live.engine.positions import load_positions, save_positions, log_pnl, log_trade, open_spread, close_spread
 from live.engine.strategy_live import get_live_strategy_signal
 from live.engine.risk import new_position, stop_loss, map_zscore_to_side, MAX_NOTIONAL_PER_PAIR
+from live.engine.notify import notify
 
 
 
@@ -120,8 +121,7 @@ def paper_trade_step(as_of_ts: datetime):
         if s1 not in history.columns or s2 not in history.columns:
             continue
             
-        print("Max window needed:", max_window)
-        print("Rows of history available:", len(history))
+        
 
         pair_prices = history[[s1, s2]].dropna()
         if len(pair_prices) < window_length:
@@ -203,7 +203,6 @@ def paper_trade_step(as_of_ts: datetime):
                     "drawdown": 0.0,
                     "z_score": latest_z,
                 })
-                print(f"{pair_id}: z={latest_z:.3f}, entry_z={entry_z}, desired_side={desired_side}")
                 continue
 
             size_notional = MAX_NOTIONAL_PER_PAIR  # or tune per pair later
@@ -252,6 +251,10 @@ def paper_trade_step(as_of_ts: datetime):
     # 5. Persist updated positions
     save_positions(positions)
 
+    if as_of_ts.hour == 14 and as_of_ts.minute <= 30:  # ~9:30 AM ET first run
+        notify("Live trader ran successfully this morning.", title="Heartbeat")
+
+
 LOCK_FILE = os.path.expanduser("~/.qt_trader.lock")
 
 if os.path.exists(LOCK_FILE):
@@ -262,7 +265,12 @@ try:
     open(LOCK_FILE, "w").close()
     if __name__ == "__main__":
         ts = datetime.now(timezone.utc)
-        paper_trade_step(ts)
+        try:
+            paper_trade_step(ts)
+        except Exception as e:
+            from live.engine.notify import notify
+            notify(f"Live trader crashed: {e}", title="ERROR", priority="urgent")
+            raise
 finally:
     os.remove(LOCK_FILE)
 

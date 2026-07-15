@@ -2,6 +2,7 @@
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
+from live.engine.notify import notify
 
 POSITION_PATH = Path("live/logs/positions.csv")
 TRADES_PATH = Path("live/logs/trades.csv")
@@ -58,6 +59,13 @@ def log_trade(trade_row: dict):
     else:
         df = pd.DataFrame([trade_row])
     df.to_csv(TRADES_PATH, index=False)
+
+    notify(
+        f"{trade_row['pair_id']}: {trade_row['action'].upper()} "
+        f"{trade_row.get('side', '')} — {trade_row.get('reason', '')}",
+        title=f"Trade {trade_row['action']}",
+        priority="high" if trade_row["action"] == "close" else "default",
+    )
 
 
 def log_pnl(pnl_row: dict):
